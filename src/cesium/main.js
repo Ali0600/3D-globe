@@ -8,12 +8,17 @@ import {
   createHud,
   createInstructions,
   createFpsMeter,
+  addHudButton,
   showOverlay,
   prefersReducedMotion,
 } from '../shared/hud.js';
 
 const CONTAINER = 'scene';
 const token = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
+
+// NASA "Earth at Night" (Black Marble) ion imagery asset — city lights.
+const EARTH_AT_NIGHT_ASSET_ID = 3812;
+const NIGHT_TEXTURE_URL = `${import.meta.env.BASE_URL}textures/earth_night.jpg`;
 
 // Shared cinematic settings.
 const DEFAULT_EXAGGERATION = 5;
@@ -89,7 +94,10 @@ async function build() {
     intensity: 2.0,
   });
   scene.light = trackingLight;
+  // Night mode (city lights) flips this off so the real sun can drive a terminator.
+  let headlightActive = true;
   scene.preRender.addEventListener(() => {
+    if (!headlightActive) return;
     const cam = scene.camera;
     Cesium.Cartesian3.clone(cam.directionWC, lightDir);
     Cesium.Cartesian3.add(
@@ -105,6 +113,53 @@ async function build() {
     Cesium.Cartesian3.normalize(lightDir, lightDir);
     trackingLight.direction = lightDir;
   });
+
+  // ── City lights (Black Marble) + Day/Night toggle ──────────────────
+  // Lazily added the first time night mode is switched on. Shows ONLY on the
+  // dark side via nightAlpha, blending with day imagery at the terminator.
+  let nightLayer = null;
+  let nightMode = false;
+
+  async function ensureNightLayer() {
+    if (nightLayer) return nightLayer;
+    let provider;
+    try {
+      provider = await Cesium.IonImageryProvider.fromAssetId(EARTH_AT_NIGHT_ASSET_ID);
+    } catch (e) {
+      console.warn(
+        '[cesium] ion "Earth at Night" (asset 3812) unavailable — falling back to the ' +
+          'local Black Marble texture.',
+        e?.message ?? e
+      );
+      provider = await Cesium.SingleTileImageryProvider.fromUrl(NIGHT_TEXTURE_URL, {
+        rectangle: Cesium.Rectangle.MAX_VALUE,
+      });
+    }
+    nightLayer = viewer.imageryLayers.addImageryProvider(provider);
+    nightLayer.dayAlpha = 0.0; // hidden on the lit side
+    nightLayer.nightAlpha = 1.0; // city lights on the dark side
+    nightLayer.show = false;
+    return nightLayer;
+  }
+
+  async function setNightMode(on) {
+    nightMode = on;
+    const layer = await ensureNightLayer();
+    layer.show = on;
+    if (on) {
+      headlightActive = false; // stop the head-light so a real terminator forms
+      scene.light = new Cesium.SunLight();
+      // Gently drift time so the terminator moves and cities sweep into view.
+      if (!prefersReducedMotion()) {
+        viewer.clock.multiplier = 1600;
+        viewer.clock.shouldAnimate = true;
+      }
+    } else {
+      headlightActive = true;
+      scene.light = trackingLight;
+      viewer.clock.shouldAnimate = false;
+    }
+  }
 
   // ── Navigation feel ───────────────────────────────────────────────
   // The default wheel zoom is sluggish on trackpads and crawls (or gets trapped
@@ -165,14 +220,21 @@ async function build() {
   });
 
   // Add a "Globe view" reset so you can always frame the whole Earth again.
-  const buttons = document.querySelector('.hud__buttons');
-  if (buttons) {
-    const globeBtn = document.createElement('button');
-    globeBtn.type = 'button';
-    globeBtn.textContent = '🌍 Globe view';
-    globeBtn.addEventListener('click', () => viewer.camera.flyHome(1.5));
-    buttons.insertBefore(globeBtn, buttons.firstChild);
-  }
+  addHudButton({
+    label: '🌍 Globe view',
+    title: 'Fly back to the whole Earth',
+    onClick: () => viewer.camera.flyHome(1.5),
+  });
+
+  // Day/Night toggle — glowing city lights on the dark side.
+  addHudButton({
+    label: '🌃 Night lights',
+    title: 'Toggle city lights / day–night',
+    onClick: (btn) => {
+      setNightMode(!nightMode);
+      btn.textContent = nightMode ? '☀️ Day view' : '🌃 Night lights';
+    },
+  });
 
   // ── Controls popup (auto-shows once, after the intro) ──────────────
   createInstructions({
@@ -183,6 +245,7 @@ async function build() {
       { keys: 'Scroll', desc: 'Zoom in and out' },
       { keys: 'Right-drag', desc: 'Tilt the camera angle' },
       { keys: '🌍 Globe view', desc: 'Snap back to the whole Earth' },
+      { keys: '🌃 Night lights', desc: 'Toggle glowing city lights (day / night)' },
       { keys: 'Relief slider', desc: 'Exaggerate mountains & ocean depths' },
       { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
     ],

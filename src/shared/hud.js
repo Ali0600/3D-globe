@@ -153,6 +153,26 @@ export function createInstructions({ engine, controls, autoShowDelay = 0 }) {
   return { open, close };
 }
 
+/**
+ * Append a button to the HUD's button row and return it, so callers can update
+ * its label later (e.g. for a toggle). Falls back to <body> if the row is absent.
+ * @param {Object} opts
+ * @param {string} opts.label
+ * @param {string} [opts.title]
+ * @param {(btn: HTMLButtonElement) => void} opts.onClick
+ * @returns {HTMLButtonElement}
+ */
+export function addHudButton({ label, title, onClick }) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = label;
+  if (title) btn.title = title;
+  btn.addEventListener('click', () => onClick(btn));
+  const row = document.querySelector('.hud__buttons');
+  (row || document.body).appendChild(btn);
+  return btn;
+}
+
 /** True if the browser can create a WebGL context. */
 export function hasWebGL() {
   try {

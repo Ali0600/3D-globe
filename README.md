@@ -35,21 +35,28 @@ Copy `.env.example` to `.env` and fill in what you want:
 
 All keys are **public, browser-side keys** — restrict them by domain in each provider's dashboard before deploying publicly.
 
-## Assets (Three.js only)
+## Assets (textures)
 
-The Three.js prototype displaces a sphere from a grayscale topo+bathy height map and drapes a color map over it. Both are public-domain NASA imagery (Blue Marble color + GEBCO elevation/bathymetry). Fetch and downscale them with:
+The Three.js prototype displaces a sphere from a grayscale topo+bathy height map and drapes a color map over it, and both globes use a night-lights map for the city-lights effect. All three are public-domain NASA imagery (Blue Marble color, GEBCO elevation/bathymetry, Black Marble night lights). Fetch and downscale them with:
 
 ```bash
 npm run download-assets
 ```
 
-That runs [`scripts/download-assets.sh`](scripts/download-assets.sh), which downloads the originals and resizes them (the raw GEBCO height map is 21600×10800) into `public/textures/`. It uses `sips` on macOS, or ImageMagick (`magick`) elsewhere. If the height map is missing, the Three.js page still runs but the globe stays smooth (with an on-screen notice).
+That runs [`scripts/download-assets.sh`](scripts/download-assets.sh), which downloads the originals and resizes them (the raw GEBCO height map is 21600×10800) into `public/textures/` (`earth_color.jpg`, `earth_height.png`, `earth_night.jpg`). It uses `sips` on macOS, or ImageMagick (`magick`) elsewhere. Missing textures degrade gracefully — the Three.js globe just stays smooth / unlit rather than erroring.
 
 ## How each prototype works
 
 - **CesiumJS** (`src/cesium/main.js`) — `Cesium.Terrain.fromWorldBathymetry()` for real land + ocean-floor relief; `scene.verticalExaggeration` drives the slider at runtime (no tile refetch). Fly out to the Mariana Trench to see the depths.
 - **Three.js** (`src/three/main.js`) — `MeshStandardMaterial` with a `displacementMap`; `displacementBias` pins sea level so oceans dip inward and land pushes out. Adds a starfield + fresnel atmosphere. *(`globe.gl` is simpler but its bump map only shades — it doesn't move geometry — so we use raw Three.js for true relief.)*
 - **MapLibre GL JS** (`src/maplibre/main.js`) — globe projection + `raster-dem` terrain via `setTerrain({ exaggeration })`. Honest about flat oceans.
+
+### 🌃 Day / Night city lights
+
+CesiumJS and Three.js have a **Night lights** toggle (HUD button) that lights up the dark side of the globe with NASA **Black Marble** city lights and a real sun terminator:
+
+- **CesiumJS** adds the ion "Earth at Night" layer (asset `3812`) with `nightAlpha` so it shows only on the dark side; toggling swaps the always-on head-light for the real sun and drifts time so the terminator moves. Falls back to the local `earth_night.jpg` texture if the ion asset isn't on your account.
+- **Three.js** uses an emissive Black Marble map, masked by a small `onBeforeCompile` shader tweak so cities glow **only** on the night hemisphere (not in daylight).
 
 ## Deploy
 

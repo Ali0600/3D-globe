@@ -10,6 +10,7 @@ import {
   createHud,
   createInstructions,
   createFpsMeter,
+  addHudButton,
   showOverlay,
   hasWebGL,
   prefersReducedMotion,
@@ -18,6 +19,7 @@ import {
 const BASE = import.meta.env.BASE_URL;
 const COLOR_URL = `${BASE}textures/earth_color.jpg`;
 const HEIGHT_URL = `${BASE}textures/earth_height.png`;
+const NIGHT_URL = `${BASE}textures/earth_night.jpg`;
 
 const RADIUS = 1;
 // Where sea level sits in the grayscale height map (deepest ocean = black = 0,
@@ -58,10 +60,13 @@ function start() {
   container.appendChild(renderer.domElement);
 
   // ── Lighting: a low sun for dramatic, raking relief shadows ─────────
-  scene.add(new THREE.AmbientLight(0x4a5a7a, 0.6));
+  const ambient = new THREE.AmbientLight(0x4a5a7a, 0.6);
+  scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xfff2dd, 2.4);
   sun.position.set(-3, 1.2, 2);
   scene.add(sun);
+  const DAY_SUN = sun.intensity;
+  const DAY_AMBIENT = ambient.intensity;
 
   // ── Starfield backdrop ──────────────────────────────────────────────
   scene.add(makeStarfield());
@@ -75,6 +80,44 @@ function start() {
   });
   const globe = new THREE.Mesh(geometry, material);
   scene.add(globe);
+
+  // ── City lights (Black Marble) + Day/Night toggle ──────────────────
+  // The emissive map glows everywhere by default; a shader patch fades it on the
+  // lit hemisphere. A `uNightFull` uniform lets "Night lights" turn the WHOLE
+  // globe to night (cities everywhere) rather than only the sun's dark side —
+  // otherwise, with a fixed sun, the side you're looking at may still be in day.
+  const sunDir = sun.position.clone().normalize();
+  const uNightFull = { value: 0 }; // 0 = only the sun's night side, 1 = whole globe
+  material.emissive = new THREE.Color(0xffffff);
+  material.emissiveIntensity = 0; // off until the user toggles Night lights
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSunDirection = { value: sunDir };
+    shader.uniforms.uNightFull = uNightFull;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCityWorldNormal;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\n  vCityWorldNormal = normalize(mat3(modelMatrix) * normal);'
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vCityWorldNormal;\nuniform vec3 uSunDirection;\nuniform float uNightFull;'
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n  float cityNight = 1.0 - smoothstep(-0.15, 0.25, dot(normalize(vCityWorldNormal), uSunDirection));\n  totalEmissiveRadiance *= mix(cityNight, 1.0, uNightFull);'
+      );
+  };
+  let nightOn = false;
+  const setNightLights = (on) => {
+    nightOn = on;
+    uNightFull.value = on ? 1 : 0; // light up the whole globe at night
+    material.emissiveIntensity = on ? 1.6 : 0;
+    // Dim the daylight so it actually reads as night (cities pop over a dark Earth).
+    sun.intensity = on ? DAY_SUN * 0.05 : DAY_SUN;
+    ambient.intensity = on ? 0.2 : DAY_AMBIENT;
+  };
 
   // Soft atmospheric rim glow (additive fresnel shell).
   scene.add(makeAtmosphere(RADIUS));
@@ -150,9 +193,20 @@ function start() {
       { keys: 'Drag', desc: 'Orbit around the globe' },
       { keys: 'Scroll', desc: 'Zoom in and out' },
       { keys: 'Right-drag', desc: 'Pan the view' },
+      { keys: '🌃 Night lights', desc: 'Toggle glowing city lights (day / night)' },
       { keys: 'Relief slider', desc: 'Raise mountains / sink trenches' },
       { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
     ],
+  });
+
+  // Day/Night toggle — glowing city lights on the dark hemisphere.
+  addHudButton({
+    label: '🌃 Night lights',
+    title: 'Toggle city lights on the night side',
+    onClick: (btn) => {
+      setNightLights(!nightOn);
+      btn.textContent = nightOn ? '☀️ Day view' : '🌃 Night lights';
+    },
   });
 
   // ── Render loop ──────────────────────────────────────────────────────
@@ -191,13 +245,22 @@ function start() {
 function loadTextures(material) {
   const loader = new THREE.TextureLoader();
   const maxAniso = 8;
-  Promise.allSettled([loader.loadAsync(COLOR_URL), loader.loadAsync(HEIGHT_URL)]).then(
-    ([color, height]) => {
+  Promise.allSettled([
+    loader.loadAsync(COLOR_URL),
+    loader.loadAsync(HEIGHT_URL),
+    loader.loadAsync(NIGHT_URL),
+  ]).then(
+    ([color, height, night]) => {
       if (color.status === 'fulfilled') {
         color.value.colorSpace = THREE.SRGBColorSpace;
         color.value.anisotropy = maxAniso;
         material.map = color.value;
         material.color.set(0xffffff);
+      }
+      if (night.status === 'fulfilled') {
+        night.value.colorSpace = THREE.SRGBColorSpace;
+        night.value.anisotropy = maxAniso;
+        material.emissiveMap = night.value; // city lights (shown only at night)
       }
       if (height.status === 'fulfilled') {
         material.displacementMap = height.value;
