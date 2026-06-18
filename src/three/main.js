@@ -59,14 +59,31 @@ function start() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   container.appendChild(renderer.domElement);
 
-  // ── Lighting: a low sun for dramatic, raking relief shadows ─────────
-  const ambient = new THREE.AmbientLight(0x4a5a7a, 0.6);
+  // ── Lighting ────────────────────────────────────────────────────────
+  const ambient = new THREE.AmbientLight(0x4a5a7a, 0.75);
   scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xfff2dd, 2.4);
   sun.position.set(-3, 1.2, 2);
   scene.add(sun);
   const DAY_SUN = sun.intensity;
   const DAY_AMBIENT = ambient.intensity;
+
+  // Head-light: keep the sun behind the camera so the side you're looking at is
+  // always lit — no permanently-dark hemisphere — offset up/left so the
+  // displacement relief still casts some shading. Called every frame.
+  const _viewDir = new THREE.Vector3();
+  const _right = new THREE.Vector3();
+  const _up = new THREE.Vector3();
+  function updateHeadLight() {
+    camera.getWorldDirection(_viewDir); // refreshes the camera's world matrix
+    _right.crossVectors(_viewDir, camera.up).normalize();
+    _up.crossVectors(_right, _viewDir).normalize();
+    const d = camera.position.length() || 3;
+    sun.position
+      .copy(camera.position)
+      .addScaledVector(_right, -0.3 * d)
+      .addScaledVector(_up, 0.2 * d);
+  }
 
   // ── Starfield backdrop ──────────────────────────────────────────────
   scene.add(makeStarfield());
@@ -226,6 +243,7 @@ function start() {
       controls.update();
     }
 
+    updateHeadLight(); // keep the lit side facing the camera (no dark hemisphere)
     renderer.render(scene, camera);
     fpsTick();
   }
