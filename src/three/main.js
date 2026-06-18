@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import '../shared/styles.css';
 import {
   createHud,
+  createInstructions,
   createFpsMeter,
   showOverlay,
   hasWebGL,
@@ -139,6 +140,19 @@ function start() {
     exaggeration: { min: 1, max: 10, value: DEFAULT_RELIEF, step: 0.5 },
     onExaggeration: setRelief,
     onReplay: playIntro,
+  });
+
+  // ── Controls popup (auto-shows once, after the intro) ────────────────
+  createInstructions({
+    engine: 'Three.js',
+    autoShowDelay: 7500,
+    controls: [
+      { keys: 'Drag', desc: 'Orbit around the globe' },
+      { keys: 'Scroll', desc: 'Zoom in and out' },
+      { keys: 'Right-drag', desc: 'Pan the view' },
+      { keys: 'Relief slider', desc: 'Raise mountains / sink trenches' },
+      { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+    ],
   });
 
   // ── Render loop ──────────────────────────────────────────────────────

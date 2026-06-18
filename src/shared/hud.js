@@ -81,6 +81,78 @@ export function createFpsMeter(onUpdate) {
   };
 }
 
+/**
+ * Build a "Controls" instructions popup and a ❔ button (added to the HUD) to
+ * reopen it. Auto-shows once per browser (remembered via localStorage); closes
+ * on the Got it button, a backdrop click, or Escape.
+ *
+ * @param {Object} opts
+ * @param {string} opts.engine                 Shown as the popup's subtitle.
+ * @param {{keys:string, desc:string}[]} opts.controls  Rows: gesture → meaning.
+ * @param {number} [opts.autoShowDelay=0]       Delay (ms) before the first auto-show
+ *                                              (e.g. let the intro flythrough play first).
+ * @returns {{ open:()=>void, close:()=>void }}
+ */
+export function createInstructions({ engine, controls, autoShowDelay = 0 }) {
+  const modal = document.createElement('div');
+  modal.className = 'help';
+  modal.hidden = true;
+  modal.innerHTML = `
+    <div class="help__backdrop"></div>
+    <div class="help__card" role="dialog" aria-modal="true" aria-label="Controls">
+      <h2 class="help__title">How to control it <span>${engine}</span></h2>
+      <ul class="help__list">
+        ${controls
+          .map((c) => `<li><kbd>${c.keys}</kbd><span class="help__desc">${c.desc}</span></li>`)
+          .join('')}
+      </ul>
+      <button class="help__close" type="button">Got it</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const open = () => {
+    modal.hidden = false;
+  };
+  const close = () => {
+    modal.hidden = true;
+  };
+
+  modal.querySelector('.help__close').addEventListener('click', close);
+  modal.querySelector('.help__backdrop').addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.hidden) close();
+  });
+
+  // ❔ button in the HUD button row (falls back to a floating button if absent).
+  const helpBtn = document.createElement('button');
+  helpBtn.type = 'button';
+  helpBtn.textContent = '❔ Controls';
+  helpBtn.addEventListener('click', open);
+  const row = document.querySelector('.hud__buttons');
+  if (row) row.appendChild(helpBtn);
+  else document.body.appendChild(helpBtn);
+
+  // Auto-show once per browser per engine.
+  const key = `globe-help-seen-${engine.toLowerCase().replace(/\s+/g, '-')}`;
+  let seen = false;
+  try {
+    seen = localStorage.getItem(key) === '1';
+  } catch {
+    /* localStorage unavailable (private mode) — just show it */
+  }
+  if (!seen) {
+    window.setTimeout(open, autoShowDelay);
+    try {
+      localStorage.setItem(key, '1');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { open, close };
+}
+
 /** True if the browser can create a WebGL context. */
 export function hasWebGL() {
   try {

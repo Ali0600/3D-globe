@@ -8,6 +8,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../shared/styles.css';
 import {
   createHud,
+  createInstructions,
   createFpsMeter,
   showOverlay,
   hasWebGL,
@@ -109,6 +110,19 @@ function start() {
     exaggeration: { min: 1, max: 6, value: DEFAULT_EXAGGERATION, step: 0.5 },
     onExaggeration: (v) => map.setTerrain({ source: 'terrainSource', exaggeration: v }),
     onReplay: playIntro,
+  });
+
+  // ── Controls popup (auto-shows once, after the intro) ──────────────
+  createInstructions({
+    engine: 'MapLibre GL JS',
+    autoShowDelay: 9500,
+    controls: [
+      { keys: 'Drag', desc: 'Pan across the map' },
+      { keys: 'Scroll', desc: 'Zoom in and out' },
+      { keys: 'Right-drag', desc: 'Rotate & tilt the view' },
+      { keys: 'Relief slider', desc: 'Exaggerate the terrain' },
+      { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+    ],
   });
 
   // ── FPS meter (ticked on each rendered frame) ──────────────────────
