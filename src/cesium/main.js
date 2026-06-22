@@ -23,26 +23,30 @@ const NIGHT_TEXTURE_URL = `${import.meta.env.BASE_URL}textures/earth_night.jpg`;
 // Shared cinematic settings.
 const DEFAULT_EXAGGERATION = 5;
 
-// Opening wide shot before the continent tour begins.
+// Opening wide shot: the whole globe from far out, near top-down.
 const FAR_VIEW = {
-  destination: Cesium.Cartesian3.fromDegrees(86.9, 5.0, 9_000_000),
-  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-55), roll: 0 },
+  destination: Cesium.Cartesian3.fromDegrees(86.9, 5.0, 14_000_000),
+  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-88), roll: 0 },
 };
 
 // Game-of-Thrones-style title sequence: sweep over all 7 continents, then settle
-// centred on Europe. Each leg is an oblique low pass; the camera arcs up and over
-// the globe between continents. Order flows around the planet, crossing the
-// Atlantic into Europe for the finale.
+// centred on Europe. Each leg is a high, near-top-down view so the WHOLE globe
+// stays in frame with the continent centred (a low/oblique pass would overfill
+// the frame and only show a sliver). The camera rotates around the planet,
+// crossing the Atlantic into Europe for the finale.
+const TOUR_HEIGHT = 10_000_000; // ~10,000 km — whole globe fits, continent centred
+const TOUR_PITCH = -85; // near top-down (small tilt for a hint of 3D)
 const CONTINENT_TOUR = [
-  { name: 'Oceania', lon: 133, lat: -25, height: 2_600_000, heading: 0, pitch: -45 },
-  { name: 'Asia', lon: 86, lat: 30, height: 2_600_000, heading: 10, pitch: -45 },
-  { name: 'Africa', lon: 21, lat: 2, height: 2_800_000, heading: 0, pitch: -45 },
-  { name: 'Antarctica', lon: 20, lat: -78, height: 3_200_000, heading: 0, pitch: -50 },
-  { name: 'South America', lon: -63, lat: -16, height: 2_700_000, heading: 0, pitch: -45 },
-  { name: 'North America', lon: -98, lat: 41, height: 2_900_000, heading: 0, pitch: -45 },
+  { name: 'Oceania', lon: 133, lat: -25, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
+  { name: 'Asia', lon: 86, lat: 30, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
+  { name: 'Africa', lon: 21, lat: 2, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
+  { name: 'Antarctica', lon: 20, lat: -78, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
+  { name: 'South America', lon: -63, lat: -16, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
+  { name: 'North America', lon: -98, lat: 41, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
 ];
-// The 7th continent and final resting view: Europe, centred, near top-down.
-const EUROPE_VIEW = { name: 'Europe', lon: 14, lat: 50, height: 5_500_000, heading: 0, pitch: -89 };
+// The 7th continent and final resting view: Europe, centred, near top-down,
+// slightly closer so it's a touch more prominent (still whole-globe in frame).
+const EUROPE_VIEW = { name: 'Europe', lon: 14, lat: 50, height: 9_000_000, heading: 0, pitch: -88 };
 const LEG_SECONDS = 3.0;
 const FINALE_SECONDS = 4.0;
 
@@ -56,7 +60,7 @@ function waypointToFlyTo(w, duration) {
       roll: 0,
     },
     duration,
-    maximumHeight: 9_000_000, // arc up and over the globe between continents
+    maximumHeight: 12_000_000, // gentle pull-back as the globe rotates between continents
   };
 }
 
