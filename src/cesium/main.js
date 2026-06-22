@@ -47,8 +47,8 @@ const CONTINENT_TOUR = [
 // The 7th continent and final resting view: Europe, centred, near top-down,
 // slightly closer so it's a touch more prominent (still whole-globe in frame).
 const EUROPE_VIEW = { name: 'Europe', lon: 14, lat: 50, height: 9_000_000, heading: 0, pitch: -88 };
-const LEG_SECONDS = 3.0;
-const FINALE_SECONDS = 4.0;
+const LEG_SECONDS = 6.0; // continent-to-continent flight time (slower = more majestic)
+const FINALE_SECONDS = 8.0;
 
 // Build a Cesium flyTo config from a { lon, lat, height, heading, pitch } waypoint.
 function waypointToFlyTo(w, duration) {
