@@ -22,20 +22,43 @@ const NIGHT_TEXTURE_URL = `${import.meta.env.BASE_URL}textures/earth_night.jpg`;
 
 // Shared cinematic settings.
 const DEFAULT_EXAGGERATION = 5;
-// A dramatic, high-relief target for the intro: the Himalaya, looking north
-// toward the high peaks at a low, horizon-skimming pitch.
-const INTRO_VIEW = {
-  destination: Cesium.Cartesian3.fromDegrees(86.9, 24.6, 160000),
-  orientation: {
-    heading: Cesium.Math.toRadians(8),
-    pitch: Cesium.Math.toRadians(-16),
-    roll: 0,
-  },
-};
+
+// Opening wide shot before the continent tour begins.
 const FAR_VIEW = {
   destination: Cesium.Cartesian3.fromDegrees(86.9, 5.0, 9_000_000),
   orientation: { heading: 0, pitch: Cesium.Math.toRadians(-55), roll: 0 },
 };
+
+// Game-of-Thrones-style title sequence: sweep over all 7 continents, then settle
+// centred on Europe. Each leg is an oblique low pass; the camera arcs up and over
+// the globe between continents. Order flows around the planet, crossing the
+// Atlantic into Europe for the finale.
+const CONTINENT_TOUR = [
+  { name: 'Oceania', lon: 133, lat: -25, height: 2_600_000, heading: 0, pitch: -45 },
+  { name: 'Asia', lon: 86, lat: 30, height: 2_600_000, heading: 10, pitch: -45 },
+  { name: 'Africa', lon: 21, lat: 2, height: 2_800_000, heading: 0, pitch: -45 },
+  { name: 'Antarctica', lon: 20, lat: -78, height: 3_200_000, heading: 0, pitch: -50 },
+  { name: 'South America', lon: -63, lat: -16, height: 2_700_000, heading: 0, pitch: -45 },
+  { name: 'North America', lon: -98, lat: 41, height: 2_900_000, heading: 0, pitch: -45 },
+];
+// The 7th continent and final resting view: Europe, centred, near top-down.
+const EUROPE_VIEW = { name: 'Europe', lon: 14, lat: 50, height: 5_500_000, heading: 0, pitch: -89 };
+const LEG_SECONDS = 3.0;
+const FINALE_SECONDS = 4.0;
+
+// Build a Cesium flyTo config from a { lon, lat, height, heading, pitch } waypoint.
+function waypointToFlyTo(w, duration) {
+  return {
+    destination: Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.height),
+    orientation: {
+      heading: Cesium.Math.toRadians(w.heading),
+      pitch: Cesium.Math.toRadians(w.pitch),
+      roll: 0,
+    },
+    duration,
+    maximumHeight: 9_000_000, // arc up and over the globe between continents
+  };
+}
 
 // Common Viewer chrome: strip the default widgets for a clean, cinematic frame.
 const widgetsOff = {
@@ -192,17 +215,35 @@ async function build() {
     });
   });
 
-  // ── Cinematic intro ────────────────────────────────────────────────
+  // ── Cinematic intro: a sweep over all 7 continents, ending on Europe ─
+  let tourSeq = 0;
   function playIntro() {
-    viewer.camera.flyTo({ ...FAR_VIEW, duration: 0 });
+    const seq = ++tourSeq; // a newer run (or Replay) invalidates this chain
+    const cam = viewer.camera;
+
     if (prefersReducedMotion()) {
-      viewer.camera.flyTo({ ...INTRO_VIEW, duration: 0 });
+      cam.flyTo(waypointToFlyTo(EUROPE_VIEW, 0));
       return;
     }
-    // Brief pause on the wide shot, then the sweeping descent.
+
+    cam.flyTo({ ...FAR_VIEW, duration: 0 }); // snap to the opening wide shot
+
+    const legs = [
+      ...CONTINENT_TOUR.map((c) => waypointToFlyTo(c, LEG_SECONDS)),
+      waypointToFlyTo(EUROPE_VIEW, FINALE_SECONDS),
+    ];
+
+    let i = 0;
+    const next = () => {
+      // Stop if a newer intro started, the tour finished, or the user took over
+      // (user interaction cancels the flight, so `complete` never fires).
+      if (seq !== tourSeq || i >= legs.length) return;
+      cam.flyTo({ ...legs[i++], complete: next });
+    };
+    // Hold on the wide shot for a beat, then begin the tour.
     window.setTimeout(() => {
-      viewer.camera.flyTo({ ...INTRO_VIEW, duration: 7, maximumHeight: 4_000_000 });
-    }, 600);
+      if (seq === tourSeq) next();
+    }, 500);
   }
 
   // ── HUD wiring ─────────────────────────────────────────────────────
