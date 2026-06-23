@@ -16,6 +16,7 @@ export default defineConfig({
         cesium: entry('./cesium.html'),
         three: entry('./three.html'),
         maplibre: entry('./maplibre.html'),
+        fantasy: entry('./fantasy.html'),
       },
     },
   },

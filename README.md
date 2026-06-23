@@ -50,6 +50,7 @@ That runs [`scripts/download-assets.sh`](scripts/download-assets.sh), which down
 - **CesiumJS** (`src/cesium/main.js`) — `Cesium.Terrain.fromWorldBathymetry()` for real land + ocean-floor relief; `scene.verticalExaggeration` drives the slider at runtime (no tile refetch). Fly out to the Mariana Trench to see the depths.
 - **Three.js** (`src/three/main.js`) — `MeshStandardMaterial` with a `displacementMap`; `displacementBias` pins sea level so oceans dip inward and land pushes out. Adds a starfield + fresnel atmosphere. *(`globe.gl` is simpler but its bump map only shades — it doesn't move geometry — so we use raw Three.js for true relief.)*
 - **MapLibre GL JS** (`src/maplibre/main.js`) — globe projection + `raster-dem` terrain via `setTerrain({ exaggeration })`. Honest about flat oceans.
+- **Fantasy World** (`src/fantasy/main.js`) — *not Earth.* A procedurally-generated planet (seeded simplex noise on an icosphere) rendered in a Game-of-Thrones **parchment** style: noise displaces the real geometry for 3D mountains over flat oceans, coloured by elevation with inked coastlines. **🎲 New world** reseeds it; the seed lives in the URL hash so you can bookmark/share a world.
 
 ### 🌃 Day / Night city lights
 
