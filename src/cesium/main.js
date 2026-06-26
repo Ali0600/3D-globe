@@ -14,7 +14,7 @@ import {
 } from '../shared/hud.js';
 import { createClips } from '../shared/clips.js';
 import { createScenarioUI } from '../shared/scenarioUI.js';
-import { playScenario, captionTrack, scenarioDurationMs } from '../shared/scenarioPlayer.js';
+import { playScenario, captionTrack, scenarioDurationMs, cancelScenario } from '../shared/scenarioPlayer.js';
 import * as scenarios from '../scenarios/index.js';
 
 const CONTAINER = 'scene';
@@ -285,14 +285,40 @@ async function build() {
     onPlay: () => currentScenario && playScenario(currentScenario, adapter),
   });
 
-  function selectScenario(s) {
+  // Loading overlay, shown from first paint until the opening view's tiles load.
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'loading';
+  loadingEl.innerHTML = '<div class="loading__spinner"></div><div>Loading the globe…</div>';
+  document.body.appendChild(loadingEl);
+
+  async function selectScenario(s) {
     if (!s) return;
+    cancelScenario(); // stop any in-flight tour while we preload
     currentScenario = s;
     const url = new URL(window.location.href);
     url.searchParams.set('scenario', s.id);
     window.history.replaceState(null, '', url);
     clips.setCaptions(captionTrack(s), scenarioDurationMs(s), `clips-captions-cesium-${s.id}`);
-    clips.play();
+
+    // Park on the opening view and wait for its tiles to finish loading, so the
+    // flythrough moves over already-loaded globe instead of popping in. The
+    // opening shows the whole Earth, so this preloads what the tour needs.
+    const w0 = s.waypoints[0];
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(w0.lon, w0.lat, w0.height),
+      orientation: {
+        heading: Cesium.Math.toRadians(w0.heading || 0),
+        pitch: Cesium.Math.toRadians(w0.pitch ?? -90),
+        roll: 0,
+      },
+    });
+    loadingEl.hidden = false;
+    loadingEl.classList.remove('is-hiding');
+    await whenGlobeReady(viewer);
+    loadingEl.classList.add('is-hiding');
+    window.setTimeout(() => (loadingEl.hidden = true), 500);
+
+    clips.play(); // starts the caption clock + the flythrough together
   }
 
   createScenarioUI({ engine: 'cesium', adapter, onSelect: selectScenario });
@@ -304,17 +330,48 @@ async function build() {
   });
   scene.postRender.addEventListener(tick);
 
-  // ── Load terrain with graceful fallbacks; update the HUD note with the result.
-  if (token) {
-    loadTerrain(viewer).then(({ note }) => {
-      const noteEl = document.querySelector('.hud__note');
-      if (noteEl) noteEl.textContent = note;
-    });
-  }
+  // Load terrain (with graceful fallbacks), THEN start the initial scenario so
+  // the preload covers terrain tiles too. The loading overlay is already up.
+  const terrainReady = token
+    ? loadTerrain(viewer).then(({ note }) => {
+        const noteEl = document.querySelector('.hud__note');
+        if (noteEl) noteEl.textContent = note;
+      })
+    : Promise.resolve();
 
-  // Initial scenario from ?scenario=… (sharable) or the default tour.
   const wantId = new URL(window.location.href).searchParams.get('scenario');
-  selectScenario((wantId && scenarios.get(wantId)) || scenarios.getDefault('cesium'));
+  const initial = (wantId && scenarios.get(wantId)) || scenarios.getDefault('cesium');
+  terrainReady.finally(() => selectScenario(initial));
+}
+
+/**
+ * Resolve once the globe's tiles for the current view have finished loading
+ * (debounced), with a timeout so a slow/again network never blocks the intro.
+ */
+function whenGlobeReady(viewer, timeoutMs = 9000) {
+  const { globe } = viewer.scene;
+  return new Promise((resolve) => {
+    let zeros = 0;
+    let remove = null;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      remove?.();
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    remove = globe.tileLoadProgressEvent.addEventListener((queued) => {
+      // Require a couple of consecutive "0 queued" events to avoid transient dips.
+      if (queued === 0 && globe.tilesLoaded) {
+        if (++zeros >= 2) finish();
+      } else {
+        zeros = 0;
+      }
+    });
+    if (globe.tilesLoaded) finish();
+  });
 }
 
 /**
