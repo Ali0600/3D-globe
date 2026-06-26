@@ -66,6 +66,15 @@ Every scenario has a **🔴 Record** button and an **✎ Captions** editor (shar
 - **Captions** are a simple editable list (`time  text`, one per line, saved to `localStorage`) shown as cinematic on-screen titles synced to the intro. Cesium's defaults are the **7 continent names**, auto-generated from the tour timings; the others get an editable title card.
 - **🔴 Record** replays the scenario and exports an **MP4** with the text baked in. It composites the engine canvas + caption onto a 2D canvas and encodes via **WebCodecs** ([`canvas-record`](https://github.com/dmnsgn/canvas-record), lazy-loaded only on first record — no page-load cost; needs no cross-origin-isolation headers). Each engine is created with `preserveDrawingBuffer: true` so the recorder can read frames.
 
+### 🎬 Scenarios (data-driven, cross-engine)
+
+Camera tours are **data**, not hardcoded — designed to scale to many scenarios:
+
+- A **scenario** is a list of geographic waypoints (`{ lon, lat, height, heading, pitch, durationMs, caption }`) + optional settings, in [`src/scenarios/`](src/scenarios/). Adding one = adding a data entry. Captions and clip length are derived from the waypoints.
+- **Cross-engine**: a shared [player](src/shared/scenarioPlayer.js) drives the same scenario on **CesiumJS, MapLibre, and the Three.js Earth** via tiny per-engine adapters that convert the geographic pose to each camera API. So `seven-continents` runs on all three. (Fidelity differs — MapLibre clamps pitch ≤85°, the Three.js globe is top-down-centric.)
+- **Picker + deep-link**: a **🎬 Scenarios** menu lists built-in + your saved scenarios; `?scenario=<id>` deep-links a specific one.
+- **In-app builder**: capture the current camera view as a waypoint, add captions/timings, **Save** (localStorage) or **Export/Import JSON**.
+
 ## Deploy
 
 `npm run build` outputs a static site to `dist/`. The included GitHub Actions workflow (`.github/workflows/deploy.yml`) builds and publishes to **GitHub Pages** on push to `main`. Add `VITE_CESIUM_ION_TOKEN` and `VITE_MAPTILER_KEY` as repository **Secrets**, and enable Pages → "GitHub Actions" in repo settings.

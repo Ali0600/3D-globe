@@ -13,6 +13,9 @@ import {
   prefersReducedMotion,
 } from '../shared/hud.js';
 import { createClips } from '../shared/clips.js';
+import { createScenarioUI } from '../shared/scenarioUI.js';
+import { playScenario, captionTrack, scenarioDurationMs } from '../shared/scenarioPlayer.js';
+import * as scenarios from '../scenarios/index.js';
 
 const CONTAINER = 'scene';
 const token = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
@@ -23,47 +26,6 @@ const NIGHT_TEXTURE_URL = `${import.meta.env.BASE_URL}textures/earth_night.jpg`;
 
 // Shared cinematic settings.
 const DEFAULT_EXAGGERATION = 5;
-
-// Opening wide shot: the whole globe from far out, near top-down.
-const FAR_VIEW = {
-  destination: Cesium.Cartesian3.fromDegrees(86.9, 5.0, 14_000_000),
-  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-88), roll: 0 },
-};
-
-// Game-of-Thrones-style title sequence: sweep over all 7 continents, then settle
-// centred on Europe. Each leg is a high, near-top-down view so the WHOLE globe
-// stays in frame with the continent centred (a low/oblique pass would overfill
-// the frame and only show a sliver). The camera rotates around the planet,
-// crossing the Atlantic into Europe for the finale.
-const TOUR_HEIGHT = 10_000_000; // ~10,000 km — whole globe fits, continent centred
-const TOUR_PITCH = -85; // near top-down (small tilt for a hint of 3D)
-const CONTINENT_TOUR = [
-  { name: 'Oceania', lon: 133, lat: -25, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
-  { name: 'Asia', lon: 86, lat: 30, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
-  { name: 'Africa', lon: 21, lat: 2, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
-  { name: 'Antarctica', lon: 20, lat: -78, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
-  { name: 'South America', lon: -63, lat: -16, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
-  { name: 'North America', lon: -98, lat: 41, height: TOUR_HEIGHT, heading: 0, pitch: TOUR_PITCH },
-];
-// The 7th continent and final resting view: Europe, centred, near top-down,
-// slightly closer so it's a touch more prominent (still whole-globe in frame).
-const EUROPE_VIEW = { name: 'Europe', lon: 14, lat: 50, height: 9_000_000, heading: 0, pitch: -88 };
-const LEG_SECONDS = 6.0; // continent-to-continent flight time (slower = more majestic)
-const FINALE_SECONDS = 8.0;
-
-// Build a Cesium flyTo config from a { lon, lat, height, heading, pitch } waypoint.
-function waypointToFlyTo(w, duration) {
-  return {
-    destination: Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.height),
-    orientation: {
-      heading: Cesium.Math.toRadians(w.heading),
-      pitch: Cesium.Math.toRadians(w.pitch),
-      roll: 0,
-    },
-    duration,
-    maximumHeight: 12_000_000, // gentle pull-back as the globe rotates between continents
-  };
-}
 
 // Common Viewer chrome: strip the default widgets for a clean, cinematic frame.
 // preserveDrawingBuffer lets the clip recorder read the rendered frame.
@@ -222,39 +184,8 @@ async function build() {
     });
   });
 
-  // ── Cinematic intro: a sweep over all 7 continents, ending on Europe ─
-  let tourSeq = 0;
-  function playIntro() {
-    const seq = ++tourSeq; // a newer run (or Replay) invalidates this chain
-    const cam = viewer.camera;
-
-    if (prefersReducedMotion()) {
-      cam.flyTo(waypointToFlyTo(EUROPE_VIEW, 0));
-      return;
-    }
-
-    cam.flyTo({ ...FAR_VIEW, duration: 0 }); // snap to the opening wide shot
-
-    const legs = [
-      ...CONTINENT_TOUR.map((c) => waypointToFlyTo(c, LEG_SECONDS)),
-      waypointToFlyTo(EUROPE_VIEW, FINALE_SECONDS),
-    ];
-
-    let i = 0;
-    const next = () => {
-      // Stop if a newer intro started, the tour finished, or the user took over
-      // (user interaction cancels the flight, so `complete` never fires).
-      if (seq !== tourSeq || i >= legs.length) return;
-      cam.flyTo({ ...legs[i++], complete: next });
-    };
-    // Hold on the wide shot for a beat, then begin the tour.
-    window.setTimeout(() => {
-      if (seq === tourSeq) next();
-    }, 500);
-  }
-
   // ── HUD wiring ─────────────────────────────────────────────────────
-  createHud({
+  const hudApi = createHud({
     engine: 'CesiumJS',
     note: token
       ? 'Loading real terrain…'
@@ -295,24 +226,68 @@ async function build() {
       { keys: '🌍 Globe view', desc: 'Snap back to the whole Earth' },
       { keys: '🌃 Night lights', desc: 'Toggle glowing city lights (day / night)' },
       { keys: 'Relief slider', desc: 'Exaggerate mountains & ocean depths' },
-      { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🎬 Scenarios', desc: 'Pick a flythrough or build your own' },
+      { keys: '↻ Replay intro', desc: 'Replay the current scenario' },
       { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
       { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
   });
 
-  // ── Clips: continent-name captions synced to the tour + MP4 recorder ─
-  const CLIP_PAUSE = 0.5; // matches the wide-shot hold in playIntro()
+  // ── Scenario system: data-driven, geographic camera tours ──────────
+  const adapter = {
+    getCanvas: () => viewer.scene.canvas,
+    applySettings: (s) => {
+      if (s.exaggeration != null) {
+        scene.verticalExaggeration = s.exaggeration;
+        hudApi.setExaggeration(s.exaggeration);
+      }
+      if (s.night === true && !nightMode) setNightMode(true);
+      if (s.night === false && nightMode) setNightMode(false);
+    },
+    flyTo: (w, durationMs, onComplete) => {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.height),
+        orientation: {
+          heading: Cesium.Math.toRadians(w.heading || 0),
+          pitch: Cesium.Math.toRadians(w.pitch ?? -90),
+          roll: 0,
+        },
+        duration: durationMs / 1000,
+        maximumHeight: w.arcHeight,
+        complete: onComplete,
+      });
+    },
+    getCurrentPose: () => {
+      const c = viewer.camera;
+      const carto = Cesium.Cartographic.fromCartesian(c.positionWC);
+      return {
+        lon: +Cesium.Math.toDegrees(carto.longitude).toFixed(4),
+        lat: +Cesium.Math.toDegrees(carto.latitude).toFixed(4),
+        height: Math.round(carto.height),
+        heading: +Cesium.Math.toDegrees(c.heading).toFixed(1),
+        pitch: +Cesium.Math.toDegrees(c.pitch).toFixed(1),
+      };
+    },
+  };
+
+  let currentScenario = null;
   const clips = createClips({
     engine: 'Cesium',
-    getCanvas: () => viewer.scene.canvas,
-    captions: [
-      ...CONTINENT_TOUR.map((c, i) => ({ at: CLIP_PAUSE + i * LEG_SECONDS, text: c.name })),
-      { at: CLIP_PAUSE + CONTINENT_TOUR.length * LEG_SECONDS, text: EUROPE_VIEW.name },
-    ],
-    durationMs: (CLIP_PAUSE + CONTINENT_TOUR.length * LEG_SECONDS + FINALE_SECONDS) * 1000,
-    onPlay: playIntro,
+    getCanvas: adapter.getCanvas,
+    onPlay: () => currentScenario && playScenario(currentScenario, adapter),
   });
+
+  function selectScenario(s) {
+    if (!s) return;
+    currentScenario = s;
+    const url = new URL(window.location.href);
+    url.searchParams.set('scenario', s.id);
+    window.history.replaceState(null, '', url);
+    clips.setCaptions(captionTrack(s), scenarioDurationMs(s), `clips-captions-cesium-${s.id}`);
+    clips.play();
+  }
+
+  createScenarioUI({ engine: 'cesium', adapter, onSelect: selectScenario });
 
   // ── FPS meter (driven by Cesium's own render loop) ─────────────────
   const hud = document.querySelector('.hud__fps');
@@ -329,7 +304,9 @@ async function build() {
     });
   }
 
-  clips.play(); // play the intro and start the caption clock together
+  // Initial scenario from ?scenario=… (sharable) or the default tour.
+  const wantId = new URL(window.location.href).searchParams.get('scenario');
+  selectScenario((wantId && scenarios.get(wantId)) || scenarios.getDefault('cesium'));
 }
 
 /**

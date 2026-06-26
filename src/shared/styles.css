@@ -433,3 +433,192 @@ body {
   font-size: 13px;
   box-shadow: var(--shadow);
 }
+
+/* ── Scenario picker / builder ───────────────────────────────────── */
+.scenario-panel {
+  position: fixed;
+  left: 16px;
+  bottom: 96px;
+  z-index: 26;
+  width: min(380px, calc(100vw - 32px));
+}
+
+.scenario-panel__card {
+  padding: 16px 18px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.scenario-panel__card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.scenario-panel__card h3 span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.scn-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scn-list > li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scn-play {
+  flex: 1;
+  text-align: left;
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: rgba(78, 161, 255, 0.12);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scn-play:hover {
+  background: rgba(78, 161, 255, 0.22);
+}
+
+.scn-tag {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scn-edit,
+.scn-del {
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.scn-edit:hover,
+.scn-del:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.scn-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.scn-title {
+  width: 100%;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.scn-wp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.scn-wp-pos {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.scn-wp-btns button {
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.scn-wp-fields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+.scn-wp-fields input[data-wf='caption'] {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.scn-dur input {
+  width: 56px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 6px;
+  font-size: 12px;
+}
+.scn-dur,
+.scn-snap {
+  font-size: 11px;
+  color: var(--muted);
+}
+.scn-list > li[data-i] {
+  display: block;
+  border: 1px solid var(--panel-border);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+
+.scenario-panel__row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.scenario-panel__row button {
+  flex: 1;
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: rgba(78, 161, 255, 0.14);
+  color: var(--text);
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scenario-panel__row button:hover {
+  background: rgba(78, 161, 255, 0.24);
+}
+.scn-hint {
+  margin: 8px 0 0;
+  min-height: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}

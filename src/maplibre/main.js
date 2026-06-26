@@ -15,13 +15,20 @@ import {
   prefersReducedMotion,
 } from '../shared/hud.js';
 import { createClips } from '../shared/clips.js';
+import { createScenarioUI } from '../shared/scenarioUI.js';
+import { playScenario, captionTrack, scenarioDurationMs } from '../shared/scenarioPlayer.js';
+import * as scenarios from '../scenarios/index.js';
 
 const maptilerKey = import.meta.env.VITE_MAPTILER_KEY?.trim();
 const DEFAULT_EXAGGERATION = 2.5;
 
-// A dramatic, high-relief target for the intro sweep: Everest / the Himalaya.
-const INTRO_TARGET = { center: [86.925, 27.62], zoom: 9.2, pitch: 78, bearing: 18 };
+// Opening wide globe view (also the map's initial camera).
 const WIDE_VIEW = { center: [86.9, 12], zoom: 1.6, pitch: 0, bearing: 0 };
+
+// Convert a geographic altitude (m) ↔ MapLibre zoom (approximate; calibrated so
+// ~10,000 km ≈ whole-globe and a few hundred km ≈ regional).
+const heightToZoom = (h) => Math.max(0, Math.min(18, Math.log2(2.0e7 / Math.max(h, 1000))));
+const zoomToHeight = (z) => 2.0e7 / Math.pow(2, z);
 
 if (!hasWebGL()) {
   showOverlay({
@@ -92,19 +99,6 @@ function start() {
   // Non-fatal: log tile/source errors (e.g. an offline DEM) without a blank screen.
   map.on('error', (e) => console.warn('[maplibre]', e?.error?.message || e));
 
-  // ── Cinematic intro ────────────────────────────────────────────────
-  function playIntro() {
-    map.jumpTo(WIDE_VIEW);
-    if (prefersReducedMotion()) {
-      map.jumpTo(INTRO_TARGET);
-      return;
-    }
-    // Let the globe register, then swoop down and tilt toward the peaks.
-    window.setTimeout(() => {
-      map.flyTo({ ...INTRO_TARGET, duration: 9000, curve: 1.42, essential: true });
-    }, 500);
-  }
-
   // ── HUD ──────────────────────────────────────────────────────────────
   const hudApi = createHud({
     engine: 'MapLibre GL JS',
@@ -123,24 +117,74 @@ function start() {
       { keys: 'Scroll', desc: 'Zoom in and out' },
       { keys: 'Right-drag', desc: 'Rotate & tilt the view' },
       { keys: 'Relief slider', desc: 'Exaggerate the terrain' },
-      { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🎬 Scenarios', desc: 'Pick a flythrough or build your own' },
+      { keys: '↻ Replay intro', desc: 'Replay the current scenario' },
       { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
       { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
   });
 
-  // ── Clips: caption overlay + MP4 recorder ────────────────────────────
+  // ── Scenario system: geographic waypoints → MapLibre camera ────────
+  const adapter = {
+    getCanvas: () => map.getCanvas(),
+    applySettings: (s) => {
+      if (s.exaggeration != null) {
+        map.setTerrain({ source: 'terrainSource', exaggeration: s.exaggeration });
+        hudApi.setExaggeration(s.exaggeration);
+      }
+    },
+    flyTo: (w, durationMs, onComplete) => {
+      const view = {
+        center: [w.lon, w.lat],
+        zoom: heightToZoom(w.height),
+        pitch: Math.max(0, Math.min(85, 90 + (w.pitch ?? -90))), // cesium pitch → maplibre
+        bearing: w.heading || 0,
+      };
+      if (durationMs <= 0) {
+        map.jumpTo(view);
+        onComplete?.();
+      } else {
+        map.once('moveend', () => onComplete?.());
+        map.flyTo({ ...view, duration: durationMs, curve: 1.42, essential: true });
+      }
+    },
+    getCurrentPose: () => {
+      const c = map.getCenter();
+      return {
+        lon: +c.lng.toFixed(4),
+        lat: +c.lat.toFixed(4),
+        height: Math.round(zoomToHeight(map.getZoom())),
+        heading: +map.getBearing().toFixed(1),
+        pitch: +(map.getPitch() - 90).toFixed(1), // maplibre pitch → cesium-style
+      };
+    },
+  };
+
+  let currentScenario = null;
   const clips = createClips({
     engine: 'MapLibre',
-    getCanvas: () => map.getCanvas(),
-    captions: [{ at: 0.3, text: 'Earth' }],
-    durationMs: 10500, // ~0.5s hold + 9s flyTo + buffer
-    onPlay: playIntro,
+    getCanvas: adapter.getCanvas,
+    onPlay: () => currentScenario && playScenario(currentScenario, adapter),
   });
+
+  function selectScenario(s) {
+    if (!s) return;
+    currentScenario = s;
+    const url = new URL(window.location.href);
+    url.searchParams.set('scenario', s.id);
+    window.history.replaceState(null, '', url);
+    clips.setCaptions(captionTrack(s), scenarioDurationMs(s), `clips-captions-maplibre-${s.id}`);
+    clips.play();
+  }
+
+  createScenarioUI({ engine: 'maplibre', adapter, onSelect: selectScenario });
 
   // ── FPS meter (ticked on each rendered frame) ──────────────────────
   const fpsTick = createFpsMeter(hudApi.setFps);
   map.on('render', fpsTick);
 
-  map.on('load', () => clips.play());
+  map.on('load', () => {
+    const wantId = new URL(window.location.href).searchParams.get('scenario');
+    selectScenario((wantId && scenarios.get(wantId)) || scenarios.getDefault('maplibre'));
+  });
 }

@@ -25,11 +25,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 export function createClips({ engine, getCanvas, captions, durationMs, onPlay, storageKey }) {
   const slug = engine.toLowerCase().replace(/\s+/g, '-');
-  const STORAGE = storageKey || `clips-captions-${slug}`;
-  const defaults = normalize(captions);
+  let STORAGE = storageKey || `clips-captions-${slug}`;
+  let defaults = normalize(captions || []);
   let track = loadTrack(STORAGE, defaults);
   let clipStart = null; // performance.now() when play() was called
   let recording = false;
+  let recordBtn = null;
+
+  // Swap in a new caption track + duration (e.g. when the scenario changes).
+  // Loads any saved per-scenario edits for the new storage key.
+  function setCaptions(newCaptions, newDurationMs, newStorageKey) {
+    if (newStorageKey) STORAGE = newStorageKey;
+    defaults = normalize(newCaptions || []);
+    track = loadTrack(STORAGE, defaults);
+    if (newDurationMs) durationMs = newDurationMs;
+    if (recordBtn) recordBtn.title = `Record a ~${Math.round(durationMs / 1000)}s MP4 clip with captions`;
+  }
 
   // ── Live caption overlay ───────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -223,14 +234,14 @@ export function createClips({ engine, getCanvas, captions, durationMs, onPlay, s
   }
 
   // ── HUD buttons ────────────────────────────────────────────────────
-  addHudButton({
+  recordBtn = addHudButton({
     label: '🔴 Record',
     title: `Record a ~${Math.round(durationMs / 1000)}s MP4 clip with captions`,
     onClick: (b) => record(b),
   });
   addHudButton({ label: '✎ Captions', title: 'Edit the on-screen captions', onClick: openEditor });
 
-  return { play, record };
+  return { play, record, setCaptions };
 }
 
 // ── Track helpers ─────────────────────────────────────────────────────

@@ -16,6 +16,9 @@ import {
   prefersReducedMotion,
 } from '../shared/hud.js';
 import { createClips } from '../shared/clips.js';
+import { createScenarioUI } from '../shared/scenarioUI.js';
+import { playScenario, captionTrack, scenarioDurationMs } from '../shared/scenarioPlayer.js';
+import * as scenarios from '../scenarios/index.js';
 
 const BASE = import.meta.env.BASE_URL;
 const COLOR_URL = `${BASE}textures/earth_color.jpg`;
@@ -165,33 +168,38 @@ function start() {
     controls.autoRotate = false; // stop idle spin once the user grabs it
   });
 
-  // ── Cinematic intro ──────────────────────────────────────────────────
-  const introFrom = new THREE.Vector3(0, 2.6, 5.2);
-  const introTo = new THREE.Vector3(1.4, 0.55, 1.85); // oblique, horizon-skimming
-  let introT = 0;
-  let introActive = true;
+  // ── Camera tween (drives the scenario adapter) ─────────────────────
+  const EARTH_R = 6_371_000;
   const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+  let tween = null; // { from, to, t, dur, onDone }
 
-  function playIntro() {
-    if (prefersReducedMotion()) {
-      camera.position.copy(introTo);
-      finishIntro();
+  function flyToPosition(to, durationS, onDone) {
+    if (durationS <= 0) {
+      camera.position.copy(to);
+      camera.lookAt(0, 0, 0);
+      tween = null;
+      onDone?.();
+      if (!tween) {
+        controls.enabled = true;
+        controls.autoRotate = true;
+      }
       return;
     }
-    introT = 0;
-    introActive = true;
+    tween = { from: camera.position.clone(), to: to.clone(), t: 0, dur: durationS, onDone };
     controls.enabled = false;
     controls.autoRotate = false;
-    camera.position.copy(introFrom);
-    camera.lookAt(0, 0, 0);
   }
 
-  function finishIntro() {
-    introActive = false;
-    controls.target.set(0, 0, 0);
-    controls.enabled = true;
-    controls.autoRotate = true;
-    camera.lookAt(0, 0, 0);
+  // Geographic (lon, lat) → unit direction on the Blue-Marble-textured sphere.
+  // (East/west may need a sign flip after a visual check — see notes.)
+  function lonLatToDir(lon, lat) {
+    const azim = ((lon + 180) / 360) * Math.PI * 2;
+    const polar = ((90 - lat) / 180) * Math.PI;
+    return new THREE.Vector3(
+      -Math.cos(azim) * Math.sin(polar),
+      Math.cos(polar),
+      Math.sin(azim) * Math.sin(polar)
+    ).normalize();
   }
 
   // ── HUD ──────────────────────────────────────────────────────────────
@@ -213,20 +221,59 @@ function start() {
       { keys: 'Right-drag', desc: 'Pan the view' },
       { keys: '🌃 Night lights', desc: 'Toggle glowing city lights (day / night)' },
       { keys: 'Relief slider', desc: 'Raise mountains / sink trenches' },
-      { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🎬 Scenarios', desc: 'Pick a flythrough or build your own' },
+      { keys: '↻ Replay intro', desc: 'Replay the current scenario' },
       { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
       { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
   });
 
-  // ── Clips: caption overlay + MP4 recorder ────────────────────────────
+  // ── Scenario system: geographic waypoints → Three.js camera ────────
+  const adapter = {
+    getCanvas: () => renderer.domElement,
+    applySettings: (s) => {
+      if (s.exaggeration != null) {
+        setRelief(s.exaggeration);
+        hudApi.setExaggeration(s.exaggeration);
+      }
+      if (s.night != null) setNightLights(!!s.night);
+    },
+    flyTo: (w, durationMs, onComplete) => {
+      const dist = Math.max(1.6, 1 + (w.height || 0) / EARTH_R); // clamp so we never clip terrain
+      flyToPosition(lonLatToDir(w.lon, w.lat).multiplyScalar(dist), durationMs / 1000, onComplete);
+    },
+    getCurrentPose: () => {
+      const p = camera.position;
+      const dir = p.clone().normalize();
+      const polar = Math.acos(THREE.MathUtils.clamp(dir.y, -1, 1));
+      let azim = Math.atan2(dir.z, -dir.x);
+      if (azim < 0) azim += Math.PI * 2;
+      return {
+        lon: +((azim / (Math.PI * 2)) * 360 - 180).toFixed(4),
+        lat: +(90 - (polar / Math.PI) * 180).toFixed(4),
+        height: Math.round((p.length() - 1) * EARTH_R),
+        heading: 0,
+        pitch: -90,
+      };
+    },
+  };
+
+  let currentScenario = null;
   const clips = createClips({
     engine: 'Three.js',
-    getCanvas: () => renderer.domElement,
-    captions: [{ at: 0.3, text: 'Earth' }],
-    durationMs: (INTRO_SECONDS + 1.5) * 1000,
-    onPlay: playIntro,
+    getCanvas: adapter.getCanvas,
+    onPlay: () => currentScenario && playScenario(currentScenario, adapter),
   });
+  function selectScenario(s) {
+    if (!s) return;
+    currentScenario = s;
+    const url = new URL(window.location.href);
+    url.searchParams.set('scenario', s.id);
+    window.history.replaceState(null, '', url);
+    clips.setCaptions(captionTrack(s), scenarioDurationMs(s), `clips-captions-three-${s.id}`);
+    clips.play();
+  }
+  createScenarioUI({ engine: 'three', adapter, onSelect: selectScenario });
 
   // Day/Night toggle — glowing city lights on the dark hemisphere.
   addHudButton({
@@ -246,11 +293,19 @@ function start() {
     requestAnimationFrame(animate);
     const dt = clock.getDelta();
 
-    if (introActive) {
-      introT = Math.min(1, introT + dt / INTRO_SECONDS);
-      camera.position.lerpVectors(introFrom, introTo, easeInOut(introT));
+    if (tween) {
+      tween.t = Math.min(1, tween.t + dt / tween.dur);
+      camera.position.lerpVectors(tween.from, tween.to, easeInOut(tween.t));
       camera.lookAt(0, 0, 0);
-      if (introT >= 1) finishIntro();
+      if (tween.t >= 1) {
+        const cb = tween.onDone;
+        tween = null;
+        cb?.();
+        if (!tween) {
+          controls.enabled = true;
+          controls.autoRotate = true;
+        }
+      }
     } else {
       controls.update();
     }
@@ -266,7 +321,8 @@ function start() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  clips.play();
+  const wantId = new URL(window.location.href).searchParams.get('scenario');
+  selectScenario((wantId && scenarios.get(wantId)) || scenarios.getDefault('three'));
   animate();
 }
 
