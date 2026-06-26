@@ -14,18 +14,21 @@ export const INTRO_PAUSE_MS = 500; // hold on the opening wide shot before legs 
  *   getCanvas() -> HTMLCanvasElement
  */
 
-/** Caption track for clips: each waypoint's caption at its arrival time (seconds). */
+/**
+ * Caption track for clips. Each waypoint's caption appears as the leg heading
+ * TOWARD it begins (anticipatory), matching the original hand-tuned timing —
+ * not at arrival, which lags ~one leg behind the camera.
+ */
 export function captionTrack(scenario) {
   const track = [];
-  let t = INTRO_PAUSE_MS;
+  let t = INTRO_PAUSE_MS; // the first real leg begins after the opening hold
   scenario.waypoints.forEach((w, i) => {
     if (i === 0) {
       if (w.caption) track.push({ at: 0, text: w.caption }); // opening title card
       return;
     }
-    t += w.durationMs || 0;
     if (w.caption) track.push({ at: +(t / 1000).toFixed(2), text: w.caption });
-    t += w.holdMs || 0;
+    t += (w.durationMs || 0) + (w.holdMs || 0);
   });
   return track;
 }

@@ -245,13 +245,21 @@ async function build() {
       if (s.night === false && nightMode) setNightMode(false);
     },
     flyTo: (w, durationMs, onComplete) => {
+      const destination = Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.height);
+      const orientation = {
+        heading: Cesium.Math.toRadians(w.heading || 0),
+        pitch: Cesium.Math.toRadians(w.pitch ?? -90),
+        roll: 0,
+      };
+      if (durationMs <= 0) {
+        // Instant + reliable (zero-duration flyTo can flash Cesium's default view).
+        viewer.camera.setView({ destination, orientation });
+        onComplete?.();
+        return;
+      }
       viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.height),
-        orientation: {
-          heading: Cesium.Math.toRadians(w.heading || 0),
-          pitch: Cesium.Math.toRadians(w.pitch ?? -90),
-          roll: 0,
-        },
+        destination,
+        orientation,
         duration: durationMs / 1000,
         maximumHeight: w.arcHeight,
         complete: onComplete,
