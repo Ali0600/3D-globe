@@ -15,6 +15,7 @@ import {
   hasWebGL,
   prefersReducedMotion,
 } from '../shared/hud.js';
+import { createClips } from '../shared/clips.js';
 
 const BASE = import.meta.env.BASE_URL;
 const COLOR_URL = `${BASE}textures/earth_color.jpg`;
@@ -52,7 +53,7 @@ function start() {
     100
   );
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   // Cap DPI so high-density displays don't tank the framerate.
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -199,7 +200,7 @@ function start() {
     note: 'Geometry deforms from a topo+bathy height map — mountains rise, ocean trenches sink.',
     exaggeration: { min: 1, max: 10, value: DEFAULT_RELIEF, step: 0.5 },
     onExaggeration: setRelief,
-    onReplay: playIntro,
+    onReplay: () => clips.play(),
   });
 
   // ── Controls popup (auto-shows once, after the intro) ────────────────
@@ -213,7 +214,18 @@ function start() {
       { keys: '🌃 Night lights', desc: 'Toggle glowing city lights (day / night)' },
       { keys: 'Relief slider', desc: 'Raise mountains / sink trenches' },
       { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
+      { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
+  });
+
+  // ── Clips: caption overlay + MP4 recorder ────────────────────────────
+  const clips = createClips({
+    engine: 'Three.js',
+    getCanvas: () => renderer.domElement,
+    captions: [{ at: 0.3, text: 'Earth' }],
+    durationMs: (INTRO_SECONDS + 1.5) * 1000,
+    onPlay: playIntro,
   });
 
   // Day/Night toggle — glowing city lights on the dark hemisphere.
@@ -254,7 +266,7 @@ function start() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  playIntro();
+  clips.play();
   animate();
 }
 

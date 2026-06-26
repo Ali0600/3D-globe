@@ -14,6 +14,7 @@ import {
   hasWebGL,
   prefersReducedMotion,
 } from '../shared/hud.js';
+import { createClips } from '../shared/clips.js';
 
 const maptilerKey = import.meta.env.VITE_MAPTILER_KEY?.trim();
 const DEFAULT_EXAGGERATION = 2.5;
@@ -84,6 +85,7 @@ function start() {
     ...WIDE_VIEW,
     maxPitch: 85,
     attributionControl: { compact: true },
+    preserveDrawingBuffer: true, // lets the clip recorder read the rendered frame
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
 
@@ -109,7 +111,7 @@ function start() {
     note: '3D land terrain from open DEM tiles. Oceans render flat — standard terrain has no bathymetry.',
     exaggeration: { min: 1, max: 6, value: DEFAULT_EXAGGERATION, step: 0.5 },
     onExaggeration: (v) => map.setTerrain({ source: 'terrainSource', exaggeration: v }),
-    onReplay: playIntro,
+    onReplay: () => clips.play(),
   });
 
   // ── Controls popup (auto-shows once, after the intro) ──────────────
@@ -122,12 +124,23 @@ function start() {
       { keys: 'Right-drag', desc: 'Rotate & tilt the view' },
       { keys: 'Relief slider', desc: 'Exaggerate the terrain' },
       { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
+      { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
+  });
+
+  // ── Clips: caption overlay + MP4 recorder ────────────────────────────
+  const clips = createClips({
+    engine: 'MapLibre',
+    getCanvas: () => map.getCanvas(),
+    captions: [{ at: 0.3, text: 'Earth' }],
+    durationMs: 10500, // ~0.5s hold + 9s flyTo + buffer
+    onPlay: playIntro,
   });
 
   // ── FPS meter (ticked on each rendered frame) ──────────────────────
   const fpsTick = createFpsMeter(hudApi.setFps);
   map.on('render', fpsTick);
 
-  map.on('load', playIntro);
+  map.on('load', () => clips.play());
 }

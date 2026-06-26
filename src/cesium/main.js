@@ -12,6 +12,7 @@ import {
   showOverlay,
   prefersReducedMotion,
 } from '../shared/hud.js';
+import { createClips } from '../shared/clips.js';
 
 const CONTAINER = 'scene';
 const token = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
@@ -65,7 +66,9 @@ function waypointToFlyTo(w, duration) {
 }
 
 // Common Viewer chrome: strip the default widgets for a clean, cinematic frame.
+// preserveDrawingBuffer lets the clip recorder read the rendered frame.
 const widgetsOff = {
+  contextOptions: { webgl: { preserveDrawingBuffer: true } },
   timeline: false,
   animation: false,
   baseLayerPicker: false,
@@ -261,7 +264,7 @@ async function build() {
       // Runtime — no tile refetch. Capped at 10 to avoid float jitter at depth.
       scene.verticalExaggeration = v;
     },
-    onReplay: playIntro,
+    onReplay: () => clips.play(),
   });
 
   // Add a "Globe view" reset so you can always frame the whole Earth again.
@@ -293,7 +296,22 @@ async function build() {
       { keys: '🌃 Night lights', desc: 'Toggle glowing city lights (day / night)' },
       { keys: 'Relief slider', desc: 'Exaggerate mountains & ocean depths' },
       { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
+      { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
+  });
+
+  // ── Clips: continent-name captions synced to the tour + MP4 recorder ─
+  const CLIP_PAUSE = 0.5; // matches the wide-shot hold in playIntro()
+  const clips = createClips({
+    engine: 'Cesium',
+    getCanvas: () => viewer.scene.canvas,
+    captions: [
+      ...CONTINENT_TOUR.map((c, i) => ({ at: CLIP_PAUSE + i * LEG_SECONDS, text: c.name })),
+      { at: CLIP_PAUSE + CONTINENT_TOUR.length * LEG_SECONDS, text: EUROPE_VIEW.name },
+    ],
+    durationMs: (CLIP_PAUSE + CONTINENT_TOUR.length * LEG_SECONDS + FINALE_SECONDS) * 1000,
+    onPlay: playIntro,
   });
 
   // ── FPS meter (driven by Cesium's own render loop) ─────────────────
@@ -311,7 +329,7 @@ async function build() {
     });
   }
 
-  playIntro();
+  clips.play(); // play the intro and start the caption clock together
 }
 
 /**

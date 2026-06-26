@@ -59,6 +59,13 @@ CesiumJS and Three.js have a **Night lights** toggle (HUD button) that lights up
 - **CesiumJS** adds the ion "Earth at Night" layer (asset `3812`) with `nightAlpha` so it shows only on the dark side; toggling swaps the always-on head-light for the real sun and drifts time so the terminator moves. Falls back to the local `earth_night.jpg` texture if the ion asset isn't on your account.
 - **Three.js** uses an emissive Black Marble map, masked by a small `onBeforeCompile` shader tweak so cities glow **only** on the night hemisphere (not in daylight).
 
+### 🎬 Record clips (captions + MP4 export)
+
+Every scenario has a **🔴 Record** button and an **✎ Captions** editor (shared module [`src/shared/clips.js`](src/shared/clips.js)):
+
+- **Captions** are a simple editable list (`time  text`, one per line, saved to `localStorage`) shown as cinematic on-screen titles synced to the intro. Cesium's defaults are the **7 continent names**, auto-generated from the tour timings; the others get an editable title card.
+- **🔴 Record** replays the scenario and exports an **MP4** with the text baked in. It composites the engine canvas + caption onto a 2D canvas and encodes via **WebCodecs** ([`canvas-record`](https://github.com/dmnsgn/canvas-record), lazy-loaded only on first record — no page-load cost; needs no cross-origin-isolation headers). Each engine is created with `preserveDrawingBuffer: true` so the recorder can read frames.
+
 ## Deploy
 
 `npm run build` outputs a static site to `dist/`. The included GitHub Actions workflow (`.github/workflows/deploy.yml`) builds and publishes to **GitHub Pages** on push to `main`. Add `VITE_CESIUM_ION_TOKEN` and `VITE_MAPTILER_KEY` as repository **Secrets**, and enable Pages → "GitHub Actions" in repo settings.

@@ -21,6 +21,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "canvas-record": "^5.5.1",
     "cesium": "^1.142.0",
     "maplibre-gl": "^5.24.0",
     "three": "^0.184.0"

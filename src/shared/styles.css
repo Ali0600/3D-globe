@@ -315,3 +315,121 @@ body {
 .help__close:hover {
   background: rgba(78, 161, 255, 0.26);
 }
+
+/* ── Clip captions + editor ──────────────────────────────────────── */
+.caption {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 13%;
+  z-index: 15;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s linear;
+}
+
+.caption span {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  font-size: clamp(22px, 4.4vw, 52px);
+  letter-spacing: 0.04em;
+  color: #fdf3dc;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85), 0 0 4px rgba(0, 0, 0, 0.6);
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgba(253, 243, 220, 0.7);
+}
+
+.clip-editor {
+  position: fixed;
+  left: 16px;
+  bottom: 96px;
+  z-index: 25;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.clip-editor__card {
+  padding: 16px 18px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.clip-editor__card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.clip-editor__card h3 span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.clip-editor__card code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.clip-editor textarea {
+  width: 100%;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.clip-editor__hint {
+  margin: 8px 0 0;
+  min-height: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.clip-editor__row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.clip-editor__row button {
+  flex: 1;
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: rgba(78, 161, 255, 0.14);
+  color: var(--text);
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.clip-editor__row button:hover {
+  background: rgba(78, 161, 255, 0.24);
+}
+
+.clip-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: 90vw;
+  padding: 10px 16px;
+  background: rgba(60, 18, 18, 0.92);
+  border: 1px solid rgba(255, 107, 107, 0.5);
+  border-radius: 10px;
+  color: #ffd5d5;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}

@@ -23,6 +23,7 @@ import {
   hasWebGL,
   prefersReducedMotion,
 } from '../shared/hud.js';
+import { createClips } from '../shared/clips.js';
 
 const RADIUS = 1;
 const DETAIL = 100; // icosphere subdivisions — only affects the silhouette; surface detail is per-pixel
@@ -243,7 +244,7 @@ function start() {
     100
   );
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   // Cap DPI to protect fill-rate (the fragment shader is noise-heavy).
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -344,7 +345,7 @@ function start() {
     onExaggeration: (v) => {
       uniforms.uAmp.value = reliefToAmp(v);
     },
-    onReplay: playIntro,
+    onReplay: () => clips.play(),
   });
 
   createInstructions({
@@ -357,6 +358,8 @@ function start() {
       { keys: '🎲 New world', desc: 'Generate a fresh procedural world (instant)' },
       { keys: 'Relief slider', desc: 'Exaggerate mountains & valleys' },
       { keys: '↻ Replay intro', desc: 'Replay the cinematic flythrough' },
+      { keys: '🔴 Record', desc: 'Record an MP4 clip with captions' },
+      { keys: '✎ Captions', desc: 'Edit the on-screen caption text & timing' },
     ],
   });
 
@@ -364,6 +367,15 @@ function start() {
     label: '🎲 New world',
     title: 'Generate a fresh procedural world',
     onClick: () => setSeed((Math.random() * 0xffffffff) >>> 0),
+  });
+
+  // ── Clips: caption overlay + MP4 recorder ────────────────────────────
+  const clips = createClips({
+    engine: 'Fantasy World',
+    getCanvas: () => renderer.domElement,
+    captions: [{ at: 0.3, text: 'A New World' }],
+    durationMs: (INTRO_SECONDS + 1.5) * 1000,
+    onPlay: playIntro,
   });
 
   // ── Head-light + render loop ───────────────────────────────────────
@@ -406,7 +418,7 @@ function start() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  playIntro();
+  clips.play();
   animate();
 }
 
